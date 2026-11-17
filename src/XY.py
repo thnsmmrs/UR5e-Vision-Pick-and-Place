@@ -1,17 +1,27 @@
-#theoretical working implementation with frame capture
+
 import cv2
+import numpy as np
 
 
-def detect_object(frame, color, region):
-    x, y, w, h = region
+def detect_object(frame, color):
+    h, w = frame.shape[:2]
 
-    roi = frame[y:y + h, x:x + w]
-    roi = cv2.GaussianBlur(roi, (5, 5), 0)
-    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    # Define workspace bounds
+    # X: 30-70% of image width
+    # Y: 0-65% of image height
+    x_min = int(w * 0.30)
+    x_max = int(w * 0.70)
+    y_min = 0
+    y_max = int(h * 0.65)
 
+    # Convert full image to HSV
+    blurred = cv2.GaussianBlur(frame, (5, 5), 0)
+    hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+
+    # Identify selected color
     if color == "Red":
-        mask1 = cv2.inRange(hsv, (0, 100, 50), (10, 255, 255))
-        mask2 = cv2.inRange(hsv, (170, 100, 50), (179, 255, 255))
+        mask1 = cv2.inRange(hsv, (0, 60, 40), (15, 255, 255))
+        mask2 = cv2.inRange(hsv, (165, 60, 40), (179, 255, 255))
         mask = cv2.bitwise_or(mask1, mask2)
 
     elif color == "Green":
@@ -23,60 +33,21 @@ def detect_object(frame, color, region):
     else:
         return None
 
+    # Create full-frame workspace mask
+    workspace_mask = np.zeros((h, w), dtype=np.uint8)
+    workspace_mask[y_min:y_max, x_min:x_max] = 255
+
+    # Ignore colors outside workspace
+    mask = cv2.bitwise_and(mask, workspace_mask)
+
+    # Calculate image moments
     M = cv2.moments(mask, binaryImage=True)
 
     if M["m00"] < 300:
         return None
 
-    u = int(M["m10"] / M["m00"]) + x
-    v = int(M["m01"] / M["m00"]) + y
+    # Full-frame centroid coordinates
+    u = int(M["m10"] / M["m00"])
+    v = int(M["m01"] / M["m00"])
 
     return (u, v)
-
-
-cap = cv2.VideoCapture(0)
-
-ok, frame = cap.read()
-cap.release()
-
-if not ok:
-    print("Camera failed")
-    exit()
-
-region = cv2.selectROI("Select Workspace", frame)
-cv2.destroyAllWindows()
-
-if region[2] == 0 or region[3] == 0:
-    print("No region selected")
-    exit()
-
-objects = {}
-
-for color in ["Red", "Green", "Blue"]:
-    point = detect_object(frame, color, region)
-
-    if point is not None:
-        objects[color] = point
-
-if not objects:
-    print("No objects detected")
-    exit()
-
-colors = list(objects.keys())
-
-print("\nAvailable Objects:")
-
-for i in range(len(colors)):
-    print(f"{i + 1}. {colors[i]}")
-
-choice = int(input("\nSelect an object: "))
-
-if choice < 1 or choice > len(colors):
-    print("Invalid selection")
-    exit()
-
-color = colors[choice - 1]
-point = objects[color]
-
-print(f"\nSelected: {color}")
-print(f"Centroid: {point}")

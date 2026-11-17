@@ -1,6 +1,7 @@
 import pyrealsense2 as rs
 import numpy as np
 import cv2
+import XY
 
 #RealSense documentation
 #https://github.com/realsenseai/librealsense/tree/master/wrappers/python#table-of-contents
@@ -10,8 +11,8 @@ import cv2
 pipeline = rs.pipeline()
 config = rs.config()
 
-config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 15)
+config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 15)
 
 pipeline.start(config)
 # Capture background depth reference
@@ -77,8 +78,8 @@ try:
         # Define workspace ROI (region of interest)
         h, w = mask.shape
 
-        x_min = int(w * 0.30)
-        x_max = int(w * 0.70)
+        x_min = int(w * 0.29)
+        x_max = int(w * 0.69)
         y_min = 0
         y_max = int(h * 0.55)
 
@@ -150,8 +151,8 @@ try:
             2
         )
         cv2.imshow("RealSense Color", color_image)
+        point = XY.detect_object(color_image, "Red")
 
-        #opencv frame analysis here
         
         #close windows when q is pressed
         if cv2.waitKey(1) & 0xFF == ord('q'):
