@@ -1,27 +1,22 @@
 
 import cv2
-import numpy as np
 
 
 def detect_object(frame, color):
     h, w = frame.shape[:2]
 
-    # Define workspace bounds
-    # X: 30-70% of image width
-    # Y: 0-65% of image height
-    x_min = int(w * 0.30)
-    x_max = int(w * 0.70)
-    y_min = 0
-    y_max = int(h * 0.65)
+    #custom workspace cropping to avoid noise generation
+    x1, x2 = int(w * 0.29), int(w * 0.69)
+    y1, y2 = 0, int(h * 0.55)
 
-    # Convert full image to HSV
-    blurred = cv2.GaussianBlur(frame, (5, 5), 0)
-    hsv = cv2.cvtColor(blurred, cv2.COLOR_BGR2HSV)
+    roi = frame[y1:y2, x1:x2]
 
-    # Identify selected color
+    #color segmentation, based on predefined hue range
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+
     if color == "Red":
-        mask1 = cv2.inRange(hsv, (0, 60, 40), (15, 255, 255))
-        mask2 = cv2.inRange(hsv, (165, 60, 40), (179, 255, 255))
+        mask1 = cv2.inRange(hsv, (0, 110, 60), (8, 255, 255))
+        mask2 = cv2.inRange(hsv, (170, 110, 60), (179, 255, 255))
         mask = cv2.bitwise_or(mask1, mask2)
 
     elif color == "Green":
@@ -33,21 +28,31 @@ def detect_object(frame, color):
     else:
         return None
 
-    # Create full-frame workspace mask
-    workspace_mask = np.zeros((h, w), dtype=np.uint8)
-    workspace_mask[y_min:y_max, x_min:x_max] = 255
+    #finding largest contour from colors
+    contours, _ = cv2.findContours(
+        mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
 
-    # Ignore colors outside workspace
-    mask = cv2.bitwise_and(mask, workspace_mask)
-
-    # Calculate image moments
-    M = cv2.moments(mask, binaryImage=True)
-
-    if M["m00"] < 300:
+    if not contours:
         return None
 
-    # Full-frame centroid coordinates
-    u = int(M["m10"] / M["m00"])
-    v = int(M["m01"] / M["m00"])
+    contour = max(contours, key=cv2.contourArea)
 
-    return (u, v)
+    if cv2.contourArea(contour) < 30: #30px minimum to avoid noise - change if needed
+        return None
+
+    #find centroid from largest contour
+    M = cv2.moments(contour)
+
+    if M["m00"] == 0:
+        return None
+
+    u = int(M["m10"] / M["m00"]) + x1
+    v = int(M["m01"] / M["m00"]) + y1
+    # Get bounding box of detected contour, used for search
+    x, y, w, h = cv2.boundingRect(contour)
+
+    # Convert coordinates from cropped ROI to full image
+    bounds = (x + x1, y + y1, w, h)
+
+    return (u, v), bounds
